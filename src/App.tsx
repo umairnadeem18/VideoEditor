@@ -4,6 +4,7 @@ import OnboardingChat from "./components/OnboardingChat";
 import ProfileManager from "./components/ProfileManager";
 import ChatPanel from "./components/ChatPanel";
 import Settings from "./components/Settings";
+import TrendPanel from "./components/TrendPanel";
 
 type View = "chat" | "profiles" | "dashboard" | "settings";
 
@@ -91,6 +92,8 @@ export default function App() {
           <ChatPanel activeId={activeId} />
         ) : view === "settings" ? (
           <Settings />
+        ) : view === "dashboard" ? (
+          <TrendPanel />
         ) : (
           <div className="flex h-full items-center justify-center">
             <div className="max-w-md rounded-xl bg-slate-800/60 p-6 text-sm text-slate-300">

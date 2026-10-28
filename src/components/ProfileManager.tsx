@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   listProfiles,
+  createProfile,
   deleteProfile,
   getFields,
   getLinks,
@@ -10,6 +11,7 @@ import {
   deleteField,
   deleteLink,
   toggleSource,
+  platformFromUrl,
   type Profile,
   type ProfileField,
   type ProfileLink,
@@ -67,14 +69,12 @@ export default function ProfileManager({
     const name = newName.trim();
     if (!name) return;
     setNewName("");
-    await createBlankProfile(name);
-    await refresh();
-  }
-
-  async function createBlankProfile(name: string) {
-    const { createProfile } = await import("../lib/profiles");
-    const id = await createProfile(name);
-    return id;
+    try {
+      await createProfile(name);
+      await refresh();
+    } catch (e) {
+      alert("Could not create profile: " + (e instanceof Error ? e.message : String(e)));
+    }
   }
 
   return (
@@ -240,9 +240,8 @@ export default function ProfileManager({
                   onClick={async () => {
                     const t = linkUrl.trim();
                     if (!t) return;
-                    const { platformFromUrl: pf } = await import("../lib/profiles");
                     const url = /^https?:\/\//i.test(t) ? t : `https://${t}`;
-                    await addLink(selected, pf(url), url);
+                    await addLink(selected, platformFromUrl(url), url);
                     setLinkUrl("");
                     setLinks(await getLinks(selected));
                   }}

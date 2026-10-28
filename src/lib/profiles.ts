@@ -44,15 +44,14 @@ export async function listProfiles(): Promise<Profile[]> {
 export async function createProfile(name: string): Promise<number> {
   const db = await getDb();
   const res = await db.execute("INSERT INTO profiles (name) VALUES ($1)", [name]);
-  const id = Number(res.lastInsertId);
-  await db.execute(
-    "INSERT INTO sources (profile_id, name) VALUES ($1, $2)",
-    [id, "__none__"]
-  );
-  await db.execute("DELETE FROM sources WHERE name = '__none__' AND profile_id = $1", [id]);
+  let id = Number(res.lastInsertId);
+  if (!Number.isFinite(id) || id <= 0) {
+    const r = await db.select<{ id: number }[]>("SELECT MAX(id) AS id FROM profiles");
+    id = Number(r?.[0]?.id ?? 0);
+  }
   for (const s of DEFAULT_SOURCES) {
     await db.execute(
-      "INSERT INTO sources (profile_id, name, enabled) VALUES ($1, $2, 1)",
+      "INSERT OR IGNORE INTO sources (profile_id, name, enabled) VALUES ($1, $2, 1)",
       [id, s]
     );
   }

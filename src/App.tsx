@@ -56,9 +56,12 @@ export default function App() {
           ).map(([v, label]) => (
             <button
               key={v}
-              onClick={() => setView(v)}
+              onClick={() => {
+                if (v !== "chat") setOnboarding(false);
+                setView(v);
+              }}
               className={`block w-full rounded-md px-3 py-2 text-left ${
-                view === v && !onboarding
+                view === v
                   ? "bg-blue-600/20 text-blue-300"
                   : "text-slate-400 hover:bg-slate-800"
               }`}
@@ -67,25 +70,20 @@ export default function App() {
             </button>
           ))}
         </nav>
+        {onboarding && (
+          <p className="mt-4 text-[10px] text-slate-500">
+            Onboarding is open in the Chat tab. Switching tabs pauses it.
+          </p>
+        )}
       </aside>
       <main className="flex-1 overflow-hidden">
-        {onboarding ? (
+        {onboarding && view === "chat" ? (
           <OnboardingChat
             onDone={(id) => {
               setActiveId(id);
               setOnboarding(false);
               setView("profiles");
               refreshProfiles();
-            }}
-          />
-        ) : view === "profiles" ? (
-          <ProfileManager
-            activeId={activeId}
-            onSelect={(id) => setActiveId(id)}
-            onProfilesChanged={refreshProfiles}
-            onRunOnboarding={() => {
-              setOnboarding(true);
-              setView("chat");
             }}
           />
         ) : view === "chat" ? (
@@ -95,12 +93,15 @@ export default function App() {
         ) : view === "dashboard" ? (
           <TrendPanel />
         ) : (
-          <div className="flex h-full items-center justify-center">
-            <div className="max-w-md rounded-xl bg-slate-800/60 p-6 text-sm text-slate-300">
-              Trend dashboard lands in Phase 3-4 (GitHub / HN / arXiv connectors +
-              agent pipeline).
-            </div>
-          </div>
+          <ProfileManager
+            activeId={activeId}
+            onSelect={(id) => setActiveId(id)}
+            onProfilesChanged={refreshProfiles}
+            onRunOnboarding={() => {
+              setOnboarding(true);
+              setView("chat");
+            }}
+          />
         )}
       </main>
     </div>

@@ -52,6 +52,7 @@ export default function OnboardingChat({
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
 
   async function submit() {
     const text = input.trim();
@@ -72,17 +73,27 @@ export default function OnboardingChat({
     setMessages(nextMessages);
     setAnswers(nextAnswers);
     setBusy(true);
+    setError(null);
 
-    const profileId = await saveProfile(nextAnswers);
-    setMessages((m) => [
-      ...m,
-      {
-        role: "agent",
-        content:
-          "Profile saved. I'll use it to filter trends for you from now on. Check the Profiles tab anytime.",
-      },
-    ]);
-    setTimeout(() => onDone(profileId), 1200);
+    try {
+      const profileId = await saveProfile(nextAnswers);
+      setMessages((m) => [
+        ...m,
+        {
+          role: "agent",
+          content:
+            "Profile saved. I'll use it to filter trends for you from now on. Check the Profiles tab anytime.",
+        },
+      ]);
+      setTimeout(() => onDone(profileId), 1200);
+    } catch (e) {
+      setBusy(false);
+      setError(
+        "Save failed: " +
+          (e instanceof Error ? e.message : String(e)) +
+          " — check Settings/tabs; you can retry or continue without finishing now."
+      );
+    }
   }
 
   return (
@@ -116,6 +127,11 @@ export default function OnboardingChat({
         {busy && (
           <div className="mr-auto rounded-xl bg-blue-900/40 p-3 text-sm text-slate-300">
             Saving your profile...
+          </div>
+        )}
+        {error && (
+          <div className="rounded-xl bg-red-900/40 p-3 text-xs text-red-300">
+            {error}
           </div>
         )}
       </div>

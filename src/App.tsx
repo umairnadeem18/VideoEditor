@@ -1,54 +1,104 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { listProfiles, type Profile } from "./lib/profiles";
+import OnboardingChat from "./components/OnboardingChat";
+import ProfileManager from "./components/ProfileManager";
 
-type Message = { role: "user" | "agent"; content: string };
+type View = "chat" | "profiles" | "dashboard";
 
 export default function App() {
-  const [messages] = useState<Message[]>([
-    {
-      role: "agent",
-      content:
-        "Hi! I'm your research agent. Phase 0 shell - chat, profiles and trend discovery coming in next phases.",
-    },
-  ]);
+  const [view, setView] = useState<View>("chat");
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const [onboarding, setOnboarding] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const list = await listProfiles();
+      setProfiles(list);
+      if (list.length) {
+        setActiveId(list[0].id);
+      } else {
+        setOnboarding(true);
+      }
+    })();
+  }, []);
+
+  function refreshProfiles() {
+    listProfiles().then((list) => {
+      setProfiles(list);
+      if (list.length && activeId === null) setActiveId(list[0].id);
+    });
+  }
+
+  const active = profiles.find((p) => p.id === activeId) ?? null;
 
   return (
     <div className="flex h-screen bg-slate-900 text-slate-100">
       <aside className="w-60 shrink-0 border-r border-slate-800 bg-slate-950 p-4">
         <h1 className="mb-4 text-lg font-semibold">Research Agent</h1>
+        {active && (
+          <div className="mb-4 rounded-lg bg-slate-800/60 p-2 text-xs">
+            <div className="text-slate-500">Active profile</div>
+            <div className="truncate font-medium text-blue-300">{active.name}</div>
+          </div>
+        )}
         <nav className="space-y-1 text-sm">
-          <button className="block w-full rounded-md bg-blue-600/20 px-3 py-2 text-left text-blue-300">
-            Chat
-          </button>
-          <button className="block w-full rounded-md px-3 py-2 text-slate-400 hover:bg-slate-800">
-            Profiles
-          </button>
-          <button className="block w-full rounded-md px-3 py-2 text-slate-400 hover:bg-slate-800">
-            Dashboard
-          </button>
+          {(
+            [
+              ["chat", "Chat"],
+              ["profiles", "Profiles"],
+              ["dashboard", "Dashboard"],
+            ] as [View, string][]
+          ).map(([v, label]) => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={`block w-full rounded-md px-3 py-2 text-left ${
+                view === v && !onboarding
+                  ? "bg-blue-600/20 text-blue-300"
+                  : "text-slate-400 hover:bg-slate-800"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </nav>
       </aside>
-      <main className="flex flex-1 flex-col">
-        <div className="flex-1 space-y-3 overflow-y-auto p-6">
-          {messages.map((m, i) => (
-            <div
-              key={i}
-              className={
-                m.role === "user"
-                  ? "self-end rounded-xl bg-slate-800 p-3"
-                  : "self-start rounded-xl bg-blue-900/40 p-3"
-              }
-            >
-              <p className="max-w-xl whitespace-pre-wrap text-sm">{m.content}</p>
-            </div>
-          ))}
-        </div>
-        <div className="border-t border-slate-800 p-4">
-          <input
-            className="w-full rounded-lg bg-slate-800 px-4 py-2 text-sm outline-none placeholder:text-slate-500"
-            placeholder="Ask about trending ideas in your field..."
-            disabled
+      <main className="flex-1 overflow-hidden">
+        {onboarding ? (
+          <OnboardingChat
+            onDone={(id) => {
+              setActiveId(id);
+              setOnboarding(false);
+              setView("profiles");
+              refreshProfiles();
+            }}
           />
-        </div>
+        ) : view === "profiles" ? (
+          <ProfileManager
+            activeId={activeId}
+            onSelect={(id) => setActiveId(id)}
+            onProfilesChanged={refreshProfiles}
+            onRunOnboarding={() => {
+              setOnboarding(true);
+              setView("chat");
+            }}
+          />
+        ) : view === "chat" ? (
+          <div className="flex h-full items-center justify-center">
+            <div className="max-w-md rounded-xl bg-slate-800/60 p-6 text-sm text-slate-300">
+              Chat with your agent lands in Phase 2 (LLM connection). Profiles are
+              stored already — open <b>Profiles</b> to review what I know about you.
+            </div>
+          </div>
+        ) : (
+          <div className="flex h-full items-center justify-center">
+            <div className="max-w-md rounded-xl bg-slate-800/60 p-6 text-sm text-slate-300">
+              Trend dashboard lands in Phase 3-4 (GitHub / HN / arXiv connectors +
+              agent pipeline).
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

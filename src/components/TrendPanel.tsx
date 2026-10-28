@@ -26,6 +26,20 @@ export default function TrendPanel() {
   const [provider, setProvider] = useState<ProviderId>("groq");
   const [model, setModel] = useState(PROVIDERS.groq.models[0]);
   const [savedNote, setSavedNote] = useState<string | null>(null);
+  const [savedReports, setSavedReports] = useState<
+    { id: number; path: string | null; createdAt: string; content: string }[]
+  >([]);
+
+  async function loadReports(id: number) {
+    const db = await getDb();
+    const rows = await db.select<
+      { id: number; path: string | null; createdAt: string; content: string }[]
+    >(
+      "SELECT id, path, created_at AS createdAt, content FROM reports WHERE profile_id = $1 ORDER BY id DESC",
+      [id]
+    );
+    setSavedReports(rows);
+  }
 
   useEffect(() => {
     listProfiles().then((list) => {
@@ -33,6 +47,7 @@ export default function TrendPanel() {
       if (list.length) {
         setProfileId(list[0].id);
         profileKeywords(list[0].id).then(setKeywords);
+        loadReports(list[0].id);
       }
     });
   }, []);
@@ -43,6 +58,7 @@ export default function TrendPanel() {
     setReport(null);
     setError(null);
     setKeywords(await profileKeywords(id));
+    loadReports(id);
   }
 
   async function runPipeline() {
@@ -91,6 +107,7 @@ export default function TrendPanel() {
         [profileId, path, report]
       );
       setSavedNote(`Saved to ${path}`);
+      loadReports(profileId);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -233,6 +250,42 @@ export default function TrendPanel() {
             trending repos/discussions/papers for your fields, then ranks them
             specifically for you and lets you save the brief as a Markdown file.
           </p>
+        )}
+
+        {savedReports.length > 0 && (
+          <section className="mt-8">
+            <h2 className="mb-2 text-sm font-semibold text-slate-300">
+              Saved briefs for this profile
+            </h2>
+            <div className="space-y-1">
+              {savedReports.map((r) => (
+                <div
+                  key={r.id}
+                  className="flex items-center gap-2 rounded-lg bg-slate-800/60 p-2"
+                >
+                  <button
+                    onClick={() => {
+                      setReport(r.content);
+                      window.scrollTo({ top: 0 });
+                    }}
+                    className="flex-1 truncate text-left text-xs text-blue-300 hover:underline"
+                  >
+                    {r.createdAt} {r.path ? `· ${r.path}` : "(not exported)"}
+                  </button>
+                  <button
+                    onClick={async () => {
+                      const db = await getDb();
+                      await db.execute("DELETE FROM reports WHERE id = $1", [r.id]);
+                      if (profileId !== null) loadReports(profileId);
+                    }}
+                    className="text-slate-500 hover:text-red-300"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
         )}
       </div>
     </div>

@@ -3,6 +3,32 @@ fn app_status() -> String {
     "ok".to_string()
 }
 
+#[tauri::command]
+fn save_api_key(provider: String, key: String) -> Result<(), String> {
+    let entry = keyring::Entry::new("research-agent", &provider).map_err(|e| e.to_string())?;
+    entry.set_password(&key).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_api_key(provider: String) -> Result<Option<String>, String> {
+    let entry = keyring::Entry::new("research-agent", &provider).map_err(|e| e.to_string())?;
+    match entry.get_password() {
+        Ok(k) => Ok(Some(k)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+fn delete_api_key(provider: String) -> Result<(), String> {
+    let entry = keyring::Entry::new("research-agent", &provider).map_err(|e| e.to_string())?;
+    match entry.delete_credential() {
+        Ok(()) => Ok(()),
+        Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 use tauri_plugin_sql::{Migration, MigrationKind};
 
@@ -31,7 +57,13 @@ pub fn run() {
                 )
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![app_status])
+        .plugin(tauri_plugin_http::init())
+        .invoke_handler(tauri::generate_handler![
+            app_status,
+            save_api_key,
+            get_api_key,
+            delete_api_key
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

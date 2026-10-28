@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { listProfiles, type Profile } from "./lib/profiles";
 import OnboardingChat from "./components/OnboardingChat";
 import ProfileManager from "./components/ProfileManager";
+import ChatPanel from "./components/ChatPanel";
+import Settings from "./components/Settings";
 
-type View = "chat" | "profiles" | "dashboard";
+type View = "chat" | "profiles" | "dashboard" | "settings";
 
 export default function App() {
   const [view, setView] = useState<View>("chat");
@@ -48,6 +50,7 @@ export default function App() {
               ["chat", "Chat"],
               ["profiles", "Profiles"],
               ["dashboard", "Dashboard"],
+              ["settings", "Settings"],
             ] as [View, string][]
           ).map(([v, label]) => (
             <button
@@ -85,12 +88,9 @@ export default function App() {
             }}
           />
         ) : view === "chat" ? (
-          <div className="flex h-full items-center justify-center">
-            <div className="max-w-md rounded-xl bg-slate-800/60 p-6 text-sm text-slate-300">
-              Chat with your agent lands in Phase 2 (LLM connection). Profiles are
-              stored already — open <b>Profiles</b> to review what I know about you.
-            </div>
-          </div>
+          <ChatPanel activeId={activeId} />
+        ) : view === "settings" ? (
+          <Settings />
         ) : (
           <div className="flex h-full items-center justify-center">
             <div className="max-w-md rounded-xl bg-slate-800/60 p-6 text-sm text-slate-300">

@@ -7,18 +7,36 @@ dist/
 src-tauri/target/
 src-tauri/gen/
 
-# Secrets - never commit
+# Secrets & credentials - NEVER commit these
 .env
 .env.*
 *.keys
+*.key
+*.pem
+*.secret
+secrets/
+credentials/
+*_token*
+*_TOKEN*
+settings.local.json
+keys.json
+tokens.json
+credentials.json
 
-# Local app databases
+# Local app databases - user data, never publish
 *.sqlite
 *.sqlite3
 *.db
+*.db-shm
+*.db-wal
+*.sqlite-journal
 
 # Editor / OS cruft
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Internal working docs / plans (not for public repo)
+.opencode/plans/
+.opencode/cache/

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { PROVIDERS, getApiKey, saveApiKey, deleteApiKey, type ProviderId } from "../lib/llm";
+import { getSecret, saveSecret, deleteSecret } from "../lib/sources/base";
 
 const HELP: Record<ProviderId, { url: string; hint: string }> = {
   groq: {
@@ -24,6 +25,9 @@ export default function Settings() {
   const [keys, setKeys] = useState<Record<string, string>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<Record<string, string>>({});
+  const [ghToken, setGhToken] = useState("");
+  const [ghDraft, setGhDraft] = useState("");
+  const [ghStatus, setGhStatus] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -31,8 +35,33 @@ export default function Settings() {
         const k = await getApiKey(id);
         setKeys((prev) => ({ ...prev, [id]: k ?? "" }));
       }
+      const gh = await getSecret("github_token");
+      setGhToken(gh ?? "");
     })();
   }, []);
+
+  async function saveGh() {
+    const val = ghDraft.trim();
+    if (!val) return;
+    try {
+      await saveSecret("github_token", val);
+      setGhToken(val);
+      setGhDraft("");
+      setGhStatus("saved to OS keyring ✓");
+    } catch (e) {
+      setGhStatus(`error: ${String(e)}`);
+    }
+  }
+
+  async function removeGh() {
+    try {
+      await deleteSecret("github_token");
+      setGhToken("");
+      setGhStatus("removed");
+    } catch (e) {
+      setGhStatus(`error: ${String(e)}`);
+    }
+  }
 
   async function save(id: ProviderId) {
     const val = (drafts[id] ?? "").trim();
@@ -109,6 +138,46 @@ export default function Settings() {
             </div>
           </section>
         ))}
+
+        <section className="rounded-xl bg-slate-800/60 p-4">
+          <h3 className="text-sm font-semibold">GitHub token (optional)</h3>
+          <p className="mt-1 text-xs text-slate-400">
+            Raises GitHub search rate limits. Create a read-only personal access
+            token at github.com/settings/tokens. Stored in the OS keyring too.
+          </p>
+          <div className="mt-3 flex gap-2">
+            <input
+              type="password"
+              value={ghDraft}
+              onChange={(e) => setGhDraft(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && saveGh()}
+              placeholder={ghToken ? "token saved - enter new to replace" : "paste token (optional)"}
+              className="flex-1 rounded bg-slate-900 px-3 py-1.5 text-xs outline-none"
+            />
+            <button
+              onClick={saveGh}
+              className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium"
+            >
+              Save
+            </button>
+            {ghToken && (
+              <button
+                onClick={removeGh}
+                className="rounded bg-slate-700 px-3 py-1.5 text-xs"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+          <div className="mt-2 flex items-center gap-2 text-[10px]">
+            {ghToken ? (
+              <span className="text-green-400">token present ✓</span>
+            ) : (
+              <span className="text-slate-500">no token (works without, rate limited)</span>
+            )}
+            {ghStatus && <span className="text-slate-400">{ghStatus}</span>}
+          </div>
+        </section>
       </div>
     </div>
   );

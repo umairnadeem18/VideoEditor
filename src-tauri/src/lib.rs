@@ -20,6 +20,14 @@ fn get_api_key(provider: String) -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
+fn export_report(path: String, content: String) -> Result<(), String> {
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    std::fs::write(&path, content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn delete_api_key(provider: String) -> Result<(), String> {
     let entry = keyring::Entry::new("research-agent", &provider).map_err(|e| e.to_string())?;
     match entry.delete_credential() {
@@ -53,16 +61,19 @@ pub fn run() {
                         migration(3, "CREATE TABLE IF NOT EXISTS profile_links (id INTEGER PRIMARY KEY AUTOINCREMENT, profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE, platform TEXT NOT NULL, url TEXT NOT NULL, UNIQUE(profile_id, platform, url));"),
                         migration(4, "CREATE TABLE IF NOT EXISTS sources (id INTEGER PRIMARY KEY AUTOINCREMENT, profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE, name TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, UNIQUE(profile_id, name));"),
                         migration(5, "CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, profile_id INTEGER REFERENCES profiles(id) ON DELETE CASCADE, role TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')));"),
+                        migration(6, "CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY AUTOINCREMENT, profile_id INTEGER REFERENCES profiles(id) ON DELETE CASCADE, path TEXT, content TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')));"),
                     ],
                 )
                 .build(),
         )
         .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             app_status,
             save_api_key,
             get_api_key,
-            delete_api_key
+            delete_api_key,
+            export_report
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

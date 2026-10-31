@@ -1,0 +1,32 @@
+#!/bin/sh
+# Blocks accidental commits of API keys / tokens / secrets.
+# Secret keys already live in the OS credential store (keyring), never in git.
+essential() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+PATTERN='(sk-[A-Za-z0-9]{20,}|sk-proj-[A-Za-z0-9_-]{20,}|gsk_[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{30,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,}|xox[bapars]-[A-Za-z0-9-]{10,}|eyJhbGciOi[A-Za-z0-9_-]{40,})'
+FILES=$(git diff --cached --name-only)
+
+violations=""
+for f in $FILES; do
+  # Skip deleted files and anything gitignored anyway
+  [ -f "$f" ] || continue
+  if git check-ignore -q "$f"; then
+    echo "WARNING: '$f' is gitignored but is being force-added - refusing." >&2
+    exit 1
+  fi
+  if git show ":$f" 2>/dev/null | grep -En "$PATTERN" >/dev/null 2>&1; then
+    violations="$violations $f"
+  fi
+done
+
+if [ -n "$violations" ]; then
+  echo "" >&2
+  echo "COMMIT BLOCKED: possible API keys/tokens found in:$violations" >&2
+  echo "Move keys to the OS credential store (keyring) or .env (gitignored)." >&2
+  echo "If this is a false positive, commit with: git commit --no-verify" >&2
+  exit 1
+fi
+
+exit 0

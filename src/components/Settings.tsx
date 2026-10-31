@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { PROVIDERS, getApiKey, saveApiKey, deleteApiKey, type ProviderId } from "../lib/llm";
+import { PROVIDERS, getApiKey, saveApiKey, deleteApiKey, checkOllama, type ProviderId, type OllamaStatus } from "../lib/llm";
 import { getSecret, saveSecret, deleteSecret } from "../lib/sources/base";
 import { IcoKey, IcoSun, IcoPeople, IcoClock, IcoRotate } from "./icons";
 
@@ -29,6 +29,107 @@ const ACCENTS: { id: Accent; label: string; css: string }[] = [
   { id: "terracotta", label: "Terracotta", css: "var(--peach)" },
   { id: "sage", label: "Sage", css: "var(--mint)" },
 ];
+
+function OllamaRow() {
+  const [status, setStatus] = useState<OllamaStatus | null>(null);
+  const [open, setOpen] = useState(false);
+  const [probing, setProbing] = useState(true);
+
+  async function probe() {
+    setProbing(true);
+    setStatus(await checkOllama());
+    setProbing(false);
+  }
+
+  useEffect(() => {
+    probe();
+  }, []);
+
+  const running = status?.running === true;
+  const pill = probing ? (
+    <span className="pill" style={{ background: "transparent", border: "1px solid var(--line-2)", color: "var(--muted)", fontSize: 13 }}>
+      checking…
+    </span>
+  ) : running ? (
+    <span className="pill" style={{ background: "var(--mint-soft)", color: "var(--mint)", fontSize: 13 }}>
+      running{status && status.models.length ? ` · ${status.models.length} model${status.models.length === 1 ? "" : "s"}` : " · no models yet"}
+    </span>
+  ) : (
+    <span className="pill" style={{ background: "transparent", border: "1px solid var(--line-2)", color: "var(--muted)", fontSize: 13 }}>
+      not running
+    </span>
+  );
+
+  return (
+    <div className="rise">
+      <div
+        className="row"
+        style={{ cursor: "pointer" }}
+        onClick={() => setOpen((o) => !o)}
+        role="button"
+        aria-expanded={open}
+      >
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <div className="tile">
+            <IcoClock size={18} />
+          </div>
+          <span>
+            Ollama (local)
+            <div className="meta" style={{ fontSize: 12, marginTop: 2 }}>
+              Optional offline fallback — fully private, no key needed.
+            </div>
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          {pill}
+          <span className="meta" style={{ fontSize: 12 }}>
+            {open ? "−" : "+"}
+          </span>
+        </div>
+      </div>
+      <div className={open ? "expand open" : "expand"}>
+        <div>
+          <div style={{ padding: "12px 6px 4px", display: "flex", flexDirection: "column", gap: 10 }}>
+            <div className="meta" style={{ fontSize: 12, lineHeight: 1.6 }}>
+              {running
+                ? "Ollama is serving locally at localhost:11434. Pick it in Chat or Dashboard to route your requests on-device."
+                : "Start it with the Ollama app in your system tray (or `ollama serve` in a terminal), then re-check."}
+            </div>
+            {running && status && status.models.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {status.models.map((m) => (
+                  <span
+                    key={m}
+                    style={{
+                      background: "var(--hover)",
+                      border: "1px solid var(--chip-line)",
+                      color: "var(--accent)",
+                      borderRadius: 999,
+                      padding: "5px 14px",
+                      fontSize: 12,
+                    }}
+                  >
+                    {m}
+                  </span>
+                ))}
+              </div>
+            )}
+            {running && status && status.models.length === 0 && (
+              <div className="meta" style={{ fontSize: 12 }}>
+                No models downloaded yet — run `ollama pull llama3.2` in a terminal (about 2 GB).
+              </div>
+            )}
+            {!running && (
+              <a href="https://ollama.com/download" className="meta" style={{ fontSize: 12, textDecoration: "underline" }}>
+                Get Ollama: ollama.com/download
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function KeyRow({
   icon,
@@ -225,20 +326,24 @@ export default function Settings({
         Settings
       </h1>
 
-      {(Object.keys(PROVIDERS) as ProviderId[]).map((id) => (
-        <KeyRow
-          key={id}
-          icon={rowIcons[id]}
-          title={PROVIDERS[id].label}
-          hint={HELP[id].hint}
-          url={HELP[id].url}
-          present={!!keys[id]}
-          status={status[id]}
-          placeholder={keys[id] ? "key saved — enter new to replace" : "paste API key"}
-          onSave={(v) => save(id, v)}
-          onRemove={PROVIDERS[id].needsKey ? () => remove(id) : undefined}
-        />
-      ))}
+      {(Object.keys(PROVIDERS) as ProviderId[]).map((id) =>
+        id === "ollama" ? (
+          <OllamaRow key={id} />
+        ) : (
+          <KeyRow
+            key={id}
+            icon={rowIcons[id]}
+            title={PROVIDERS[id].label}
+            hint={HELP[id].hint}
+            url={HELP[id].url}
+            present={!!keys[id]}
+            status={status[id]}
+            placeholder={keys[id] ? "key saved — enter new to replace" : "paste API key"}
+            onSave={(v) => save(id, v)}
+            onRemove={PROVIDERS[id].needsKey ? () => remove(id) : undefined}
+          />
+        )
+      )}
 
       <KeyRow
         icon={<IcoPeople />}

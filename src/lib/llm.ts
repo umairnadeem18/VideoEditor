@@ -147,6 +147,26 @@ export async function chat(provider: ProviderId, model: string, msgs: ChatMsg[])
   }
 }
 
+export type OllamaStatus = { running: boolean; models: string[] };
+
+export async function checkOllama(): Promise<OllamaStatus> {
+  try {
+    const res = await fetch("http://localhost:11434/api/tags", {
+      method: "GET",
+      connectTimeout: 2000,
+      timeout: 4000,
+    } as never);
+    if (!res.ok) return { running: false, models: [] };
+    const data = await res.json();
+    const models = ((data?.models ?? []) as { name?: string; model?: string }[])
+      .map((m) => m.name ?? m.model ?? "")
+      .filter(Boolean);
+    return { running: true, models };
+  } catch {
+    return { running: false, models: [] };
+  }
+}
+
 export type FallbackResult = { content: string; providerUsed: ProviderId };
 
 export async function chatWithFallback(
@@ -157,6 +177,7 @@ export async function chatWithFallback(
   const order: ProviderId[] = [
     requested,
     ...CLOUD_ORDER.filter((p) => p !== requested),
+    ...(requested === "ollama" ? [] : (["ollama"] as ProviderId[])),
   ];
   const errors: string[] = [];
   for (const p of order) {

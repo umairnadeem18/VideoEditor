@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { PROVIDERS, getApiKey, saveApiKey, deleteApiKey, type ProviderId } from "../lib/llm";
 import { getSecret, saveSecret, deleteSecret } from "../lib/sources/base";
+import { IcoKey, IcoSun, IcoPeople, IcoClock, IcoRotate } from "./icons";
+
+type Accent = "apricot" | "terracotta" | "sage";
 
 const HELP: Record<ProviderId, { url: string; hint: string }> = {
   groq: {
@@ -17,13 +20,126 @@ const HELP: Record<ProviderId, { url: string; hint: string }> = {
   },
   ollama: {
     url: "https://ollama.com/download",
-    hint: "Optional local fallback. Install Ollama and pull a model (e.g. llama3.2). Planned for later phase.",
+    hint: "Optional local fallback. Install Ollama and pull a model (e.g. llama3.2).",
   },
 };
 
-export default function Settings() {
+const ACCENTS: { id: Accent; label: string; css: string }[] = [
+  { id: "apricot", label: "Apricot", css: "var(--accent)" },
+  { id: "terracotta", label: "Terracotta", css: "var(--peach)" },
+  { id: "sage", label: "Sage", css: "var(--mint)" },
+];
+
+function KeyRow({
+  icon,
+  title,
+  hint,
+  url,
+  present,
+  status,
+  onSave,
+  onRemove,
+  placeholder,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  hint?: string;
+  url?: string;
+  present: boolean;
+  status?: string;
+  onSave: (val: string) => void;
+  onRemove?: () => void;
+  placeholder: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  return (
+    <div className="rise">
+      <div
+        className="row"
+        style={{ cursor: "pointer" }}
+        onClick={() => setOpen((o) => !o)}
+        role="button"
+        aria-expanded={open}
+      >
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <div className="tile">{icon}</div>
+          <span>
+            {title}
+            {hint && <div className="meta" style={{ fontSize: 12, marginTop: 2 }}>{hint}</div>}
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <span
+            className="pill"
+            style={present ? undefined : { background: "transparent", border: "1px solid var(--line-2)", color: "var(--muted)", fontSize: 13 }}
+          >
+            {present ? "key saved ✓" : "not set"}
+          </span>
+          <span className="meta" style={{ fontSize: 12 }}>
+            {open ? "−" : "+"}
+          </span>
+        </div>
+      </div>
+      <div className={open ? "expand open" : "expand"}>
+        <div>
+          <div style={{ padding: "12px 6px 4px", display: "flex", flexDirection: "column", gap: 10 }}>
+            {url && (
+              <a href={url} className="meta" style={{ fontSize: 12, textDecoration: "underline" }}>
+                Get a key: {url}
+              </a>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                type="password"
+                className="text-input"
+                style={{ flex: 1 }}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder={placeholder}
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && draft.trim()) {
+                    onSave(draft.trim());
+                    setDraft("");
+                  }
+                }}
+              />
+              <button
+                className="chip"
+                style={{ minHeight: 44, padding: "0 22px", color: "var(--on-accent)", background: "var(--accent)", borderColor: "transparent" }}
+                onClick={() => {
+                  const v = draft.trim();
+                  if (!v) return;
+                  onSave(v);
+                  setDraft("");
+                }}
+              >
+                Save
+              </button>
+              {present && onRemove && (
+                <button className="chip" style={{ minHeight: 44, padding: "0 22px", color: "#F0A090", background: "transparent" }} onClick={onRemove}>
+                  Remove
+                </button>
+              )}
+            </div>
+            {status && <div className="meta" style={{ fontSize: 11 }}>{status}</div>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function Settings({
+  accent,
+  onAccent,
+}: {
+  accent: Accent;
+  onAccent: (a: Accent) => void;
+}) {
   const [keys, setKeys] = useState<Record<string, string>>({});
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<Record<string, string>>({});
   const [ghToken, setGhToken] = useState("");
   const [ghDraft, setGhDraft] = useState("");
@@ -63,13 +179,11 @@ export default function Settings() {
     }
   }
 
-  async function save(id: ProviderId) {
-    const val = (drafts[id] ?? "").trim();
+  async function save(id: ProviderId, val: string) {
     if (!val) return;
     try {
       await saveApiKey(id, val);
       setKeys((prev) => ({ ...prev, [id]: val }));
-      setDrafts((prev) => ({ ...prev, [id]: "" }));
       setStatus((prev) => ({ ...prev, [id]: "saved to OS keyring ✓" }));
     } catch (e) {
       setStatus((prev) => ({ ...prev, [id]: `error: ${String(e)}` }));
@@ -86,99 +200,90 @@ export default function Settings() {
     }
   }
 
-  return (
-    <div className="h-full overflow-y-auto p-6">
-      <div className="mx-auto max-w-2xl space-y-5">
-        <p className="text-xs text-slate-400">
-          API keys are stored in your operating system's secure credential store
-          (Windows Credential Manager / macOS Keychain / Linux Secret Service) —
-          never in files or git.
-        </p>
-        {(Object.keys(PROVIDERS) as ProviderId[]).map((id) => (
-          <section key={id} className="rounded-xl bg-slate-800/60 p-4">
-            <h3 className="text-sm font-semibold">{PROVIDERS[id].label}</h3>
-            <p className="mt-1 text-xs text-slate-400">{HELP[id].hint}</p>
-            <a
-              href={HELP[id].url}
-              className="text-xs text-blue-300 underline decoration-slate-600"
-            >
-              Get a key: {HELP[id].url}
-            </a>
-            <div className="mt-3 flex gap-2">
-              <input
-                type="password"
-                value={drafts[id] ?? ""}
-                onChange={(e) => setDrafts((p) => ({ ...p, [id]: e.target.value }))}
-                onKeyDown={(e) => e.key === "Enter" && save(id)}
-                placeholder={keys[id] ? "key saved - enter new to replace" : "paste API key"}
-                className="flex-1 rounded bg-slate-900 px-3 py-1.5 text-xs outline-none"
-              />
-              <button
-                onClick={() => save(id)}
-                className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium"
-              >
-                Save
-              </button>
-              {keys[id] && (
-                <button
-                  onClick={() => remove(id)}
-                  className="rounded bg-slate-700 px-3 py-1.5 text-xs"
-                >
-                  Remove
-                </button>
-              )}
-            </div>
-            <div className="mt-2 flex items-center gap-2 text-[10px]">
-              {keys[id] ? (
-                <span className="text-green-400">key present ✓</span>
-              ) : (
-                <span className="text-slate-500">no key</span>
-              )}
-              {status[id] && <span className="text-slate-400">{status[id]}</span>}
-            </div>
-          </section>
-        ))}
+  const rowIcons: Record<ProviderId, React.ReactNode> = {
+    groq: <IcoSun size={18} />,
+    gemini: <IcoKey size={18} />,
+    openrouter: <IcoRotate size={18} />,
+    ollama: <IcoClock size={18} />,
+  };
 
-        <section className="rounded-xl bg-slate-800/60 p-4">
-          <h3 className="text-sm font-semibold">GitHub token (optional)</h3>
-          <p className="mt-1 text-xs text-slate-400">
-            Raises GitHub search rate limits. Create a read-only personal access
-            token at github.com/settings/tokens. Stored in the OS keyring too.
-          </p>
-          <div className="mt-3 flex gap-2">
-            <input
-              type="password"
-              value={ghDraft}
-              onChange={(e) => setGhDraft(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && saveGh()}
-              placeholder={ghToken ? "token saved - enter new to replace" : "paste token (optional)"}
-              className="flex-1 rounded bg-slate-900 px-3 py-1.5 text-xs outline-none"
-            />
+  return (
+    <div
+      className="rise"
+      style={{
+        width: "100%",
+        maxWidth: 560,
+        marginTop: 64,
+        display: "flex",
+        flexDirection: "column",
+        gap: 14,
+        overflowY: "auto",
+        paddingBottom: 8,
+      }}
+    >
+      <h1 className="rise ser" style={{ animationDelay: "0s", margin: "0 0 18px", fontWeight: 400, fontSize: 46 }}>
+        Settings
+      </h1>
+
+      {(Object.keys(PROVIDERS) as ProviderId[]).map((id) => (
+        <KeyRow
+          key={id}
+          icon={rowIcons[id]}
+          title={PROVIDERS[id].label}
+          hint={HELP[id].hint}
+          url={HELP[id].url}
+          present={!!keys[id]}
+          status={status[id]}
+          placeholder={keys[id] ? "key saved — enter new to replace" : "paste API key"}
+          onSave={(v) => save(id, v)}
+          onRemove={PROVIDERS[id].needsKey ? () => remove(id) : undefined}
+        />
+      ))}
+
+      <KeyRow
+        icon={<IcoPeople />}
+        title="GitHub token (optional)"
+        hint="Raises GitHub search rate limits — read-only PAT from github.com/settings/tokens."
+        url="https://github.com/settings/tokens"
+        present={!!ghToken}
+        status={ghStatus || (ghToken ? undefined : "works without it, rate limited")}
+        placeholder={ghToken ? "token saved — enter new to replace" : "paste token (optional)"}
+        onSave={() => saveGh()}
+        onRemove={removeGh}
+      />
+
+      {/* Accent picker — exactly the design's row, now functional */}
+      <div className="row rise" style={{ animationDelay: "0.55s" }}>
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <div className="tile">
+            <IcoPeople />
+          </div>
+          Accent
+        </div>
+        <div style={{ display: "flex", gap: 12 }}>
+          {ACCENTS.map((a) => (
             <button
-              onClick={saveGh}
-              className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium"
-            >
-              Save
-            </button>
-            {ghToken && (
-              <button
-                onClick={removeGh}
-                className="rounded bg-slate-700 px-3 py-1.5 text-xs"
-              >
-                Remove
-              </button>
-            )}
-          </div>
-          <div className="mt-2 flex items-center gap-2 text-[10px]">
-            {ghToken ? (
-              <span className="text-green-400">token present ✓</span>
-            ) : (
-              <span className="text-slate-500">no token (works without, rate limited)</span>
-            )}
-            {ghStatus && <span className="text-slate-400">{ghStatus}</span>}
-          </div>
-        </section>
+              key={a.id}
+              aria-label={a.label}
+              title={a.label}
+              onClick={() => onAccent(a.id)}
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: "50%",
+                border: 0,
+                background: a.css,
+                ...(accent === a.id ? { outline: "2px solid #F6F0E6", outlineOffset: 3 } : {}),
+              }}
+            />
+          ))}
+        </div>
       </div>
+
+      <p className="meta rise" style={{ animationDelay: "0.7s", fontSize: 12, margin: "4px 0 0", lineHeight: 1.6 }}>
+        API keys are stored in your operating system's secure credential store (Windows Credential
+        Manager / macOS Keychain / Linux Secret Service) — never in files or git.
+      </p>
     </div>
   );
 }

@@ -1,18 +1,29 @@
 import { useEffect, useState } from "react";
 import { listProfiles, type Profile } from "./lib/profiles";
+import Rail from "./components/Rail";
+import Home from "./components/Home";
 import OnboardingChat from "./components/OnboardingChat";
 import ProfileManager from "./components/ProfileManager";
 import ChatPanel from "./components/ChatPanel";
 import Settings from "./components/Settings";
 import TrendPanel from "./components/TrendPanel";
 
-type View = "chat" | "profiles" | "dashboard" | "settings";
+export type View = "home" | "chat" | "profiles" | "dashboard" | "settings";
 
 export default function App() {
-  const [view, setView] = useState<View>("chat");
+  const [view, setView] = useState<View>("home");
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [onboarding, setOnboarding] = useState(false);
+  const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
+  const [accent, setAccent] = useState<"apricot" | "terracotta" | "sage">(() => {
+    const v = localStorage.getItem("ra.accent");
+    return v === "terracotta" || v === "sage" ? v : "apricot";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("ra.accent", accent);
+  }, [accent]);
 
   useEffect(() => {
     (async () => {
@@ -27,56 +38,50 @@ export default function App() {
   }, []);
 
   function refreshProfiles() {
-    listProfiles().then((list) => {
+    return listProfiles().then((list) => {
       setProfiles(list);
       if (list.length && activeId === null) setActiveId(list[0].id);
     });
   }
 
+  function nav(v: View) {
+    if (v !== "chat") setOnboarding(false);
+    setView(v);
+  }
+
+  function ask(text?: string) {
+    if (text) setPendingPrompt(text);
+    setView("chat");
+  }
+
   const active = profiles.find((p) => p.id === activeId) ?? null;
 
   return (
-    <div className="flex h-screen bg-slate-900 text-slate-100">
-      <aside className="w-60 shrink-0 border-r border-slate-800 bg-slate-950 p-4">
-        <h1 className="mb-4 text-lg font-semibold">Research Agent</h1>
-        {active && (
-          <div className="mb-4 rounded-lg bg-slate-800/60 p-2 text-xs">
-            <div className="text-slate-500">Active profile</div>
-            <div className="truncate font-medium text-blue-300">{active.name}</div>
-          </div>
-        )}
-        <nav className="space-y-1 text-sm">
-          {(
-            [
-              ["chat", "Chat"],
-              ["profiles", "Profiles"],
-              ["dashboard", "Dashboard"],
-              ["settings", "Settings"],
-            ] as [View, string][]
-          ).map(([v, label]) => (
-            <button
-              key={v}
-              onClick={() => {
-                if (v !== "chat") setOnboarding(false);
-                setView(v);
-              }}
-              className={`block w-full rounded-md px-3 py-2 text-left ${
-                view === v
-                  ? "bg-blue-600/20 text-blue-300"
-                  : "text-slate-400 hover:bg-slate-800"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </nav>
-        {onboarding && (
-          <p className="mt-4 text-[10px] text-slate-500">
-            Onboarding is open in the Chat tab. Switching tabs pauses it.
-          </p>
-        )}
-      </aside>
-      <main className="flex-1 overflow-hidden">
+    <div
+      data-accent={accent}
+      style={{
+        display: "grid",
+        gridTemplateColumns: "84px 1fr",
+        height: "100vh",
+        background: "var(--ink)",
+        color: "var(--text)",
+        fontFamily: "'DM Sans', system-ui, sans-serif",
+      }}
+    >
+      <Rail view={view} onNav={nav} />
+
+      <main
+        style={{
+          padding: "36px 48px 40px",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          boxSizing: "border-box",
+          minWidth: 0,
+          overflow: "hidden",
+          position: "relative",
+        }}
+      >
         {onboarding && view === "chat" ? (
           <OnboardingChat
             onDone={(id) => {
@@ -87,12 +92,16 @@ export default function App() {
             }}
           />
         ) : view === "chat" ? (
-          <ChatPanel activeId={activeId} />
+          <ChatPanel
+            activeId={activeId}
+            pendingPrompt={pendingPrompt}
+            onPromptConsumed={() => setPendingPrompt(null)}
+          />
         ) : view === "settings" ? (
-          <Settings />
+          <Settings accent={accent} onAccent={setAccent} />
         ) : view === "dashboard" ? (
           <TrendPanel />
-        ) : (
+        ) : view === "profiles" ? (
           <ProfileManager
             activeId={activeId}
             onSelect={(id) => setActiveId(id)}
@@ -102,6 +111,8 @@ export default function App() {
               setView("chat");
             }}
           />
+        ) : (
+          <Home activeName={active?.name ?? null} onRefresh={refreshProfiles} onNav={nav} onAsk={ask} />
         )}
       </main>
     </div>

@@ -7,6 +7,7 @@ import { buildProfileContext } from "../lib/profileContext";
 import { fetchTrendsForProfile, profileKeywords, type SourceResult } from "../lib/sources";
 import { analyzeTrends } from "../lib/agent";
 import { PROVIDERS, type ProviderId } from "../lib/llm";
+import { IcoDashboard, IcoRefresh, IcoClock } from "./icons";
 
 const SOURCE_LABELS: Record<string, string> = {
   github: "GitHub",
@@ -116,13 +117,30 @@ export default function TrendPanel() {
   const totalItems = results.reduce((n, r) => n + r.items.length, 0);
 
   return (
-    <div className="h-full overflow-y-auto p-6">
-      <div className="mx-auto max-w-3xl">
-        <div className="mb-4 flex flex-wrap items-center gap-2">
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        width: "100%",
+        height: "100%",
+        overflowY: "auto",
+      }}
+    >
+      <div className="rise" style={{ width: "100%", maxWidth: 620, display: "flex", flexDirection: "column" }}>
+        <h1 className="rise ser" style={{ margin: "0 0 6px", fontWeight: 400, fontSize: 46 }}>
+          Trends
+        </h1>
+        <p className="rise meta" style={{ animationDelay: "0.1s", margin: 0, fontSize: 15 }}>
+          Trending repos, papers and discussions — ranked for you.
+        </p>
+
+        {/* controls */}
+        <div className="rise" style={{ animationDelay: "0.2s", display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginTop: 20 }}>
           <select
+            className="select"
             value={profileId ?? ""}
             onChange={(e) => pickProfile(Number(e.target.value))}
-            className="rounded bg-slate-800 px-2 py-1.5 text-sm outline-none"
           >
             {profiles.map((p) => (
               <option key={p.id} value={p.id}>
@@ -131,13 +149,13 @@ export default function TrendPanel() {
             ))}
           </select>
           <select
+            className="select"
             value={provider}
             onChange={(e) => {
               const p = e.target.value as ProviderId;
               setProvider(p);
               setModel(PROVIDERS[p].models[0]);
             }}
-            className="rounded bg-slate-800 px-2 py-1.5 text-xs outline-none"
           >
             {Object.entries(PROVIDERS).map(([id, p]) => (
               <option key={id} value={id}>
@@ -145,96 +163,178 @@ export default function TrendPanel() {
               </option>
             ))}
           </select>
-          <select
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            className="rounded bg-slate-800 px-2 py-1.5 text-xs outline-none"
-          >
+          <select className="select" value={model} onChange={(e) => setModel(e.target.value)}>
             {PROVIDERS[provider].models.map((m) => (
               <option key={m} value={m}>
                 {m}
               </option>
             ))}
           </select>
-          <button
-            onClick={runPipeline}
-            disabled={busy || profileId === null}
-            className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium disabled:opacity-40"
-          >
-            {busy ? phase || "Working..." : "Fetch & analyze trends"}
-          </button>
-          {report && (
+          {report && !busy && (
             <button
+              className="chip"
+              style={{ color: "var(--on-accent)", background: "var(--mint)", borderColor: "transparent" }}
               onClick={saveReport}
-              className="rounded-lg bg-emerald-600 px-4 py-1.5 text-sm font-medium"
             >
               Save as .md
             </button>
           )}
+          <button
+            className="chip"
+            style={{ color: "var(--on-accent)", background: "var(--accent)", borderColor: "transparent", opacity: busy || profileId === null ? 0.5 : 1 }}
+            disabled={busy || profileId === null}
+            onClick={runPipeline}
+          >
+            {busy ? (
+              <>
+                <span className="dot" style={{ background: "var(--on-accent)" }} />
+                {phase || "Working..."}
+              </>
+            ) : (
+              <>
+                <IcoRefresh size={16} />
+                Fetch &amp; analyze
+              </>
+            )}
+          </button>
         </div>
 
+        {/* keyword pills */}
         {keywords.length > 0 && (
-          <div className="mb-4 flex flex-wrap items-center gap-1 text-[10px] text-slate-400">
-            searching:
+          <div className="rise" style={{ animationDelay: "0.3s", marginTop: 16, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+            <span className="meta" style={{ fontSize: 12 }}>searching</span>
             {keywords.map((k) => (
-              <span key={k} className="rounded-full bg-slate-800 px-2 py-0.5">
+              <span
+                key={k}
+                style={{
+                  background: "var(--hover)",
+                  border: "1px solid var(--line-2)",
+                  color: "var(--muted)",
+                  borderRadius: 999,
+                  padding: "5px 14px",
+                  fontSize: 12,
+                }}
+              >
                 {k}
               </span>
             ))}
-            <span className="ml-1">(last 30 days)</span>
+            <span className="meta" style={{ fontSize: 12 }}>(last 30 days)</span>
           </div>
         )}
+      </div>
 
-        {error && (
-          <p className="mb-4 whitespace-pre-wrap rounded-lg bg-red-900/30 p-3 text-xs text-red-300">
-            {error}
-          </p>
-        )}
-        {savedNote && (
-          <p className="mb-4 rounded-lg bg-emerald-900/30 p-3 text-xs text-emerald-300">
-            {savedNote}
-          </p>
-        )}
+      {/* in-flight status: rings + bounce */}
+      {busy && (
+        <div className="rise" style={{ marginTop: 40, display: "flex", flexDirection: "column", alignItems: "center", gap: 18 }}>
+          <div style={{ position: "relative", width: 150, height: 150 }}>
+            <div className="ring" style={{ borderColor: "var(--accent)", width: 150, height: 150, margin: "-75px 0 0 -75px" }} />
+            <div className="ring" style={{ borderColor: "var(--accent)", width: 150, height: 150, margin: "-75px 0 0 -75px", animationDelay: "-2.5s" }} />
+            <div className="ring" style={{ borderColor: "var(--accent)", width: 150, height: 150, margin: "-75px 0 0 -75px", animationDelay: "-5s" }} />
+            <div
+              style={{
+                position: "absolute",
+                inset: 55,
+                borderRadius: "50%",
+                background: "var(--accent)",
+                animation: "breathe 5s ease-in-out infinite",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <IcoDashboard size={22} style={{ color: "var(--on-accent)" }} />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 15 }}>
+            <span>{phase || "Working..."}</span>
+            <span className="typing" style={{ display: "flex", gap: 5 }}>
+              <span style={{ animationDelay: "0s" }} />
+              <span style={{ animationDelay: "0.2s" }} />
+              <span style={{ animationDelay: "0.4s" }} />
+            </span>
+          </div>
+        </div>
+      )}
 
-        {report && (
-          <section className="mb-8">
-            <h2 className="mb-2 text-sm font-semibold text-blue-300">
-              Trend brief (LLM-ranked for this profile)
-            </h2>
-            <pre className="whitespace-pre-wrap rounded-xl bg-slate-800/60 p-4 font-sans text-xs leading-relaxed text-slate-200">
-              {report}
-            </pre>
-          </section>
-        )}
+      {/* the brief */}
+      {report && (
+        <section className="rise" style={{ width: "100%", maxWidth: 620, marginTop: 36 }}>
+          <h2 className="ser" style={{ margin: "0 0 14px", fontWeight: 400, fontSize: 30 }}>
+            Trend brief
+          </h2>
+          <div className="card" style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 16, lineHeight: 1.65, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+            {report}
+          </div>
+        </section>
+      )}
 
-        <details className="mb-4">
-          <summary className="cursor-pointer text-xs text-slate-400">
-            Raw fetched items ({totalItems})
+      {error && (
+        <div
+          className="rise"
+          style={{
+            width: "100%",
+            maxWidth: 620,
+            marginTop: 24,
+            background: "var(--peach-soft)",
+            color: "#F0A090",
+            border: "1px solid var(--chip-line)",
+            borderRadius: 18,
+            padding: "14px 20px",
+            fontSize: 13,
+            whiteSpace: "pre-wrap",
+          }}
+        >
+          {error}
+        </div>
+      )}
+      {savedNote && (
+        <div className="rise" style={{ width: "100%", maxWidth: 620, marginTop: 24 }}>
+          <div className="row" style={{ fontSize: 13, color: "var(--mint)" }}>
+            <div style={{ display: "flex", alignItems: "center" }}>
+              <div className="tile">
+                <IcoClock size={18} />
+              </div>
+              {savedNote}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* raw items */}
+      {results.length > 0 && (
+        <details className="rise" style={{ width: "100%", maxWidth: 620, marginTop: 32 }}>
+          <summary
+            className="chip"
+            style={{ width: "100%", justifyContent: "space-between", listStyle: "none", display: "flex" }}
+          >
+            <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span className="dot" style={{ background: "var(--peach)" }} />
+              Raw fetched items
+            </span>
+            <span className="meta" style={{ fontSize: 13 }}>{totalItems}</span>
           </summary>
-          <div className="mt-3 space-y-5">
+          <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 20 }}>
             {results.map((r) => (
               <section key={r.source}>
-                <h3 className="mb-2 text-sm font-semibold text-slate-300">
+                <h3 style={{ margin: "0 0 8px", fontSize: 15, fontWeight: 500 }}>
                   {SOURCE_LABELS[r.source] ?? r.source}
-                  <span className="ml-2 text-xs font-normal text-slate-500">
+                  <span className="meta" style={{ fontSize: 12, marginLeft: 8 }}>
                     {r.items.length} items
                   </span>
                 </h3>
                 {r.error && (
-                  <p className="rounded bg-red-900/30 p-2 text-xs text-red-300">
+                  <p className="meta" style={{ fontSize: 12, margin: 0 }}>
                     {r.error}
                   </p>
                 )}
-                <div className="space-y-1">
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {r.items.map((it, i) => (
-                    <a
-                      key={i}
-                      href={it.url}
-                      className="block rounded-lg bg-slate-800/60 p-2.5 hover:bg-slate-800"
-                    >
-                      <div className="text-sm text-slate-200">{it.title}</div>
-                      <div className="mt-0.5 text-[10px] text-slate-500">
-                        {it.date} · {it.extra}
+                    <a key={i} href={it.url} className="row" style={{ fontSize: 14, textDecoration: "none" }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ overflowWrap: "anywhere" }}>{it.title}</div>
+                        <div className="meta" style={{ fontSize: 11, marginTop: 3 }}>
+                          {it.date} · {it.extra}
+                        </div>
                       </div>
                     </a>
                   ))}
@@ -243,51 +343,52 @@ export default function TrendPanel() {
             ))}
           </div>
         </details>
+      )}
 
-        {!results.length && !report && !busy && !error && (
-          <p className="text-sm text-slate-500">
-            Pick a profile and hit <b>Fetch &amp; analyze</b>. The agent pulls
-            trending repos/discussions/papers for your fields, then ranks them
-            specifically for you and lets you save the brief as a Markdown file.
-          </p>
-        )}
+      {!results.length && !report && !busy && !error && (
+        <p className="rise meta" style={{ animationDelay: "0.5s", marginTop: 48, maxWidth: 460, textAlign: "center", fontSize: 15, lineHeight: 1.6 }}>
+          Pick a profile and hit <b style={{ color: "var(--text)" }}>Fetch &amp; analyze</b>. The agent
+          pulls trending repos, discussions and papers for your fields, ranks them for you, and lets
+          you save the brief as a Markdown file.
+        </p>
+      )}
 
-        {savedReports.length > 0 && (
-          <section className="mt-8">
-            <h2 className="mb-2 text-sm font-semibold text-slate-300">
-              Saved briefs for this profile
-            </h2>
-            <div className="space-y-1">
-              {savedReports.map((r) => (
-                <div
-                  key={r.id}
-                  className="flex items-center gap-2 rounded-lg bg-slate-800/60 p-2"
+      {/* saved briefs */}
+      {savedReports.length > 0 && (
+        <section className="rise" style={{ width: "100%", maxWidth: 620, marginTop: 40 }}>
+          <h2 className="ser" style={{ margin: "0 0 14px", fontWeight: 400, fontSize: 30 }}>
+            Saved briefs
+          </h2>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {savedReports.map((r) => (
+              <div key={r.id} className="row" style={{ fontSize: 14 }}>
+                <button
+                  onClick={() => {
+                    setReport(r.content);
+                    window.scrollTo({ top: 0 });
+                  }}
+                  className="meta"
+                  style={{ flex: 1, textAlign: "left", background: "transparent", border: 0, color: "var(--accent)", fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  title={r.path ?? undefined}
                 >
-                  <button
-                    onClick={() => {
-                      setReport(r.content);
-                      window.scrollTo({ top: 0 });
-                    }}
-                    className="flex-1 truncate text-left text-xs text-blue-300 hover:underline"
-                  >
-                    {r.createdAt} {r.path ? `· ${r.path}` : "(not exported)"}
-                  </button>
-                  <button
-                    onClick={async () => {
-                      const db = await getDb();
-                      await db.execute("DELETE FROM reports WHERE id = $1", [r.id]);
-                      if (profileId !== null) loadReports(profileId);
-                    }}
-                    className="text-slate-500 hover:text-red-300"
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-      </div>
+                  {r.createdAt} {r.path ? `· ${r.path}` : "(not exported)"}
+                </button>
+                <button
+                  onClick={async () => {
+                    const db = await getDb();
+                    await db.execute("DELETE FROM reports WHERE id = $1", [r.id]);
+                    if (profileId !== null) loadReports(profileId);
+                  }}
+                  style={{ background: "transparent", border: 0, color: "var(--muted)" }}
+                  title="Delete"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

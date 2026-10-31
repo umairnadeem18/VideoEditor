@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createProfile,
   setField,
   addLink,
   platformFromUrl,
 } from "../lib/profiles";
+import { IcoSend } from "./icons";
 
 type Message = { role: "agent" | "user"; content: string };
 
@@ -35,6 +36,8 @@ const QUESTIONS = [
   },
 ];
 
+const ROLE_CHIPS = ["Student", "Researcher", "Developer", "Freelancer"];
+
 export default function OnboardingChat({
   onDone,
 }: {
@@ -53,9 +56,14 @@ export default function OnboardingChat({
   const [busy, setBusy] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  async function submit() {
-    const text = input.trim();
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages, busy, error]);
+
+  async function submit(preset?: string) {
+    const text = (preset ?? input).trim();
     if (!text || busy) return;
     setInput("");
     const key = QUESTIONS[step].key;
@@ -82,10 +90,10 @@ export default function OnboardingChat({
         {
           role: "agent",
           content:
-            "Profile saved. I'll use it to filter trends for you from now on. Check the Profiles tab anytime.",
+            "Profile saved. I'll use it to filter trends for you from now on. Taking you to your profile…",
         },
       ]);
-      setTimeout(() => onDone(profileId), 1200);
+      setTimeout(() => onDone(profileId), 1400);
     } catch (e) {
       setBusy(false);
       setError(
@@ -97,67 +105,147 @@ export default function OnboardingChat({
   }
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-2xl flex-col p-6">
-      <div className="mb-3 flex items-center gap-2 text-xs text-slate-400">
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        width: "100%",
+        height: "100%",
+      }}
+    >
+      {/* progress tubes — exactly the design's segmented rope */}
+      <div className="rise" style={{ display: "flex", gap: 10, alignItems: "center" }} aria-hidden="true">
         {QUESTIONS.map((q, i) => (
           <span
             key={q.key}
-            className={`h-1.5 w-8 rounded-full ${
-              i < step ? "bg-blue-500" : i === step ? "bg-blue-400" : "bg-slate-700"
-            }`}
+            style={{
+              width: i === 0 ? 44 : 28,
+              height: 6,
+              borderRadius: 99,
+              background: i <= step ? "var(--accent)" : "var(--line-2)",
+              transition: "background .35s ease",
+            }}
           />
         ))}
-        <span>
-          Question {Math.min(step + 1, QUESTIONS.length)} of {QUESTIONS.length}
-        </span>
       </div>
-      <div className="flex-1 space-y-3 overflow-y-auto pr-1">
+
+      <div
+        ref={scrollRef}
+        style={{
+          width: "100%",
+          maxWidth: 620,
+          marginTop: 48,
+          flex: 1,
+          overflowY: "auto",
+          display: "flex",
+          flexDirection: "column",
+          gap: 14,
+          paddingBottom: 12,
+        }}
+      >
         {messages.map((m, i) => (
           <div
             key={i}
-            className={
-              m.role === "user"
-                ? "ml-auto max-w-xl rounded-xl bg-slate-800 p-3"
-                : "mr-auto max-w-xl rounded-xl bg-blue-900/40 p-3"
-            }
+            className="rise"
+            style={{ animationDelay: `${Math.min(i * 0.12, 0.6)}s`, display: "flex", gap: 14, alignItems: m.role === "user" ? undefined : "flex-end" }}
           >
-            <p className="whitespace-pre-wrap text-sm">{m.content}</p>
+            {m.role === "agent" ? (
+              <>
+                <div
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: "50%",
+                    background: "var(--accent)",
+                    animation: "breathe 5s ease-in-out infinite",
+                    flex: "none",
+                  }}
+                />
+                <div className="bubble-agent">{m.content}</div>
+              </>
+            ) : (
+              <>
+                <div style={{ width: 54, flex: "none" }} />
+                <div className="bubble-user">{m.content}</div>
+              </>
+            )}
           </div>
         ))}
-        {busy && (
-          <div className="mr-auto rounded-xl bg-blue-900/40 p-3 text-sm text-slate-300">
-            Saving your profile...
+
+        {step === 0 && !busy && (
+          <div className="rise" style={{ animationDelay: "1s", marginLeft: 54, display: "flex", flexWrap: "wrap", gap: 12, marginTop: 6 }}>
+            {ROLE_CHIPS.map((c) => (
+              <button key={c} className="chip" style={{ fontSize: 15 }} onClick={() => submit(c)}>
+                {c}
+              </button>
+            ))}
           </div>
         )}
+
+        {busy && (
+          <div style={{ marginLeft: 54, display: "flex", gap: 6, padding: "10px 4px" }} className="typing" aria-label="Working">
+            <span style={{ animationDelay: "0s" }} />
+            <span style={{ animationDelay: "0.2s" }} />
+            <span style={{ animationDelay: "0.4s" }} />
+          </div>
+        )}
+
         {error && (
-          <div className="rounded-xl bg-red-900/40 p-3 text-xs text-red-300">
+          <div
+            className="rise"
+            style={{
+              background: "var(--peach-soft)",
+              color: "#F0A090",
+              border: "1px solid var(--chip-line)",
+              borderRadius: 18,
+              padding: "12px 20px",
+              fontSize: 13,
+            }}
+          >
             {error}
           </div>
         )}
       </div>
-      <div className="mt-4 flex gap-2">
+
+      <form
+        className="rise bar"
+        style={{ animationDelay: "0.7s", width: "100%", maxWidth: 620, flex: "none" }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+      >
+        <label htmlFor="msg" style={{ position: "absolute", left: -9999 }}>
+          Your answer
+        </label>
         <input
-          className="flex-1 rounded-lg bg-slate-800 px-4 py-2 text-sm outline-none placeholder:text-slate-500"
-          placeholder={
-            busy ? "Saving..." : "Type your answer... (Enter to send)"
-          }
+          id="msg"
+          placeholder={busy ? "Saving..." : "Type your answer"}
           value={input}
           disabled={busy}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
           autoFocus
         />
-        <button
-          onClick={submit}
-          disabled={busy}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium disabled:opacity-40"
-        >
-          Send
+        <button className="send" aria-label="Send" disabled={busy} style={{ ...sendBtn, opacity: busy ? 0.4 : 1 }}>
+          <IcoSend />
         </button>
-      </div>
+      </form>
     </div>
   );
 }
+
+const sendBtn: React.CSSProperties = {
+  width: 44,
+  height: 44,
+  borderRadius: "50%",
+  border: 0,
+  background: "var(--peach)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  flex: "none",
+};
 
 function parseLinks(text: string): { platform: string; url: string }[] {
   const out: { platform: string; url: string }[] = [];

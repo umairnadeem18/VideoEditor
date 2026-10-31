@@ -9,9 +9,19 @@ import {
   type ChatMsg,
   type ProviderId,
 } from "../lib/llm";
+import { IcoSend } from "./icons";
 
 type Message = { role: "user" | "agent"; content: string };
-export default function ChatPanel({ activeId }: { activeId: number | null }) {
+
+export default function ChatPanel({
+  activeId,
+  pendingPrompt,
+  onPromptConsumed,
+}: {
+  activeId: number | null;
+  pendingPrompt: string | null;
+  onPromptConsumed: () => void;
+}) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -20,6 +30,7 @@ export default function ChatPanel({ activeId }: { activeId: number | null }) {
   const [error, setError] = useState<string | null>(null);
   const [systemPrompt, setSystemPrompt] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (activeId === null) return;
@@ -40,7 +51,14 @@ export default function ChatPanel({ activeId }: { activeId: number | null }) {
   }, [activeId]);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+    if (pendingPrompt === null) return;
+    setInput(pendingPrompt);
+    onPromptConsumed();
+    inputRef.current?.focus();
+  }, [pendingPrompt, onPromptConsumed]);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, busy]);
 
   async function send() {
@@ -88,17 +106,26 @@ export default function ChatPanel({ activeId }: { activeId: number | null }) {
   }
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-3xl flex-col p-6">
-      <div className="mb-3 flex items-center gap-2 text-xs">
-        <span className="text-slate-500">Model:</span>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        width: "100%",
+        height: "100%",
+      }}
+    >
+      {/* header: model chips, mirroring the design's muted top area */}
+      <div className="rise" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", justifyContent: "center" }}>
+        <span className="dot" style={{ background: "var(--accent)" }} />
         <select
+          className="select"
           value={provider}
           onChange={(e) => {
             const p = e.target.value as ProviderId;
             setProvider(p);
             setModel(PROVIDERS[p].models[0]);
           }}
-          className="rounded bg-slate-800 px-2 py-1 outline-none"
         >
           {Object.entries(PROVIDERS).map(([id, p]) => (
             <option key={id} value={id}>
@@ -107,9 +134,9 @@ export default function ChatPanel({ activeId }: { activeId: number | null }) {
           ))}
         </select>
         <select
+          className="select"
           value={model}
           onChange={(e) => setModel(e.target.value)}
-          className="rounded bg-slate-800 px-2 py-1 outline-none"
         >
           {PROVIDERS[provider].models.map((m) => (
             <option key={m} value={m}>
@@ -118,53 +145,127 @@ export default function ChatPanel({ activeId }: { activeId: number | null }) {
           ))}
         </select>
         {activeId === null && (
-          <span className="text-amber-400">no active profile</span>
+          <span className="pill" style={{ background: "var(--peach-soft)", color: "#F0A090" }}>
+            no active profile
+          </span>
         )}
       </div>
 
-      <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto pr-1">
-        {messages.map((m, i) => (
-          <div
-            key={i}
-            className={
-              m.role === "user"
-                ? "ml-auto max-w-xl rounded-xl bg-slate-800 p-3"
-                : "mr-auto max-w-xl rounded-xl bg-blue-900/40 p-3"
-            }
-          >
-            <p className="whitespace-pre-wrap text-sm">{m.content}</p>
-          </div>
-        ))}
-        {busy && (
-          <div className="mr-auto rounded-xl bg-blue-900/40 p-3 text-sm text-slate-400">
-            Thinking...
+      <div
+        ref={scrollRef}
+        style={{
+          width: "100%",
+          maxWidth: 620,
+          marginTop: 40,
+          flex: 1,
+          overflowY: "auto",
+          display: "flex",
+          flexDirection: "column",
+          gap: 14,
+          paddingBottom: 12,
+        }}
+      >
+        {messages.length === 0 && !busy && (
+          <div className="rise" style={{ display: "flex", gap: 14, alignItems: "flex-end", marginTop: 24 }}>
+            <div
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                background: "var(--accent)",
+                animation: "breathe 5s ease-in-out infinite",
+                flex: "none",
+              }}
+            />
+            <div className="bubble-agent ser" style={{ fontSize: 26, lineHeight: 1.25 }}>
+              Hello. Let's talk research.
+            </div>
           </div>
         )}
+
+        {messages.map((m, i) =>
+          m.role === "agent" ? (
+            <div key={i} className="rise" style={{ display: "flex", gap: 14, alignItems: "flex-end" }}>
+              <div
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: "50%",
+                  background: "var(--accent)",
+                  animation: "breathe 5s ease-in-out infinite",
+                  flex: "none",
+                }}
+              />
+              <div className="bubble-agent">{m.content}</div>
+            </div>
+          ) : (
+            <div key={i} className="rise">
+              <div className="bubble-user">{m.content}</div>
+            </div>
+          )
+        )}
+
+        {busy && (
+          <div style={{ marginLeft: 54, display: "flex", gap: 6, padding: "10px 4px" }} className="typing" aria-label="Thinking">
+            <span style={{ animationDelay: "0s" }} />
+            <span style={{ animationDelay: "0.2s" }} />
+            <span style={{ animationDelay: "0.4s" }} />
+          </div>
+        )}
+
         {error && (
-          <div className="rounded-xl bg-red-900/40 p-3 text-xs text-red-300">
+          <div
+            className="rise"
+            style={{
+              background: "var(--peach-soft)",
+              color: "#F0A090",
+              border: "1px solid var(--chip-line)",
+              borderRadius: 18,
+              padding: "12px 20px",
+              fontSize: 13,
+              whiteSpace: "pre-wrap",
+            }}
+          >
             {error}
           </div>
         )}
       </div>
 
-      <div className="mt-4 flex gap-2">
+      <form
+        className="rise bar"
+        style={{ animationDelay: "0.7s", width: "100%", maxWidth: 620, flex: "none" }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          send();
+        }}
+      >
+        <label htmlFor="msg" style={{ position: "absolute", left: -9999 }}>
+          Your answer
+        </label>
         <input
-          className="flex-1 rounded-lg bg-slate-800 px-4 py-2 text-sm outline-none placeholder:text-slate-500"
-          placeholder={busy ? "Waiting for reply..." : "Ask your research agent..."}
+          id="msg"
+          ref={inputRef}
+          placeholder={busy ? "Waiting for reply..." : "Type your answer"}
           value={input}
           disabled={busy}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && send()}
         />
-        <button
-          onClick={send}
-          disabled={busy}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium disabled:opacity-40"
-        >
-          Send
+        <button className="send" aria-label="Send" disabled={busy} style={{ ...sendBtn, opacity: busy ? 0.4 : 1 }}>
+          <IcoSend />
         </button>
-      </div>
+      </form>
     </div>
   );
 }
 
+const sendBtn: React.CSSProperties = {
+  width: 44,
+  height: 44,
+  borderRadius: "50%",
+  border: 0,
+  background: "var(--peach)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  flex: "none",
+};

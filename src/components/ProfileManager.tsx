@@ -12,11 +12,19 @@ import {
   deleteLink,
   toggleSource,
   platformFromUrl,
-  type Profile,
   type ProfileField,
   type ProfileLink,
   type ProfileSource,
 } from "../lib/profiles";
+import { IcoPlus, IcoRefresh } from "./icons";
+
+const INVALID_KEYS = new Set(["interests", "fields_of_study", "about", "role"]);
+
+const CHIP_TONES = [
+  { bg: "var(--accent-soft)", color: "var(--accent)" },
+  { bg: "var(--peach-soft)", color: "#F0A090" },
+  { bg: "var(--mint-soft)", color: "var(--mint)" },
+];
 
 export default function ProfileManager({
   activeId,
@@ -29,15 +37,19 @@ export default function ProfileManager({
   onProfilesChanged: () => void;
   onRunOnboarding: () => void;
 }) {
-  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [profiles, setProfiles] = useState<{ id: number; name: string }[]>([]);
   const [selected, setSelected] = useState<number | null>(activeId);
   const [fields, setFields] = useState<ProfileField[]>([]);
   const [links, setLinks] = useState<ProfileLink[]>([]);
   const [sources, setSources] = useState<ProfileSource[]>([]);
   const [newName, setNewName] = useState("");
+  const [addingProfile, setAddingProfile] = useState(false);
   const [editKey, setEditKey] = useState("");
   const [editValue, setEditValue] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
+  const [addingInterest, setAddingInterest] = useState(false);
+  const [interestDraft, setInterestDraft] = useState("");
+  const [openSection, setOpenSection] = useState<"details" | "links" | "sources" | null>(null);
 
   async function refresh() {
     const list = await listProfiles();
@@ -65,226 +77,381 @@ export default function ProfileManager({
     })();
   }, [selected]);
 
-  async function addProfile() {
+  const role = fields.find((f) => f.key === "role")?.value;
+  const interests = fields
+    .filter((f) => f.key === "interests" || f.key === "fields_of_study")
+    .flatMap((f) => f.value.split(/[,;]+/).map((s) => s.trim()))
+    .filter(Boolean);
+  const details = fields.filter((f) => !INVALID_KEYS.has(f.key) && f.value.trim());
+  const sel = profiles.find((p) => p.id === selected);
+
+  async function addInterest() {
+    const t = interestDraft.trim();
+    if (!t || selected === null) return;
+    const existing = fields.find((f) => f.key === "interests")?.value ?? "";
+    await setField(selected, "interests", existing ? `${existing}, ${t}` : t);
+    setInterestDraft("");
+    setAddingInterest(false);
+    setFields(await getFields(selected));
+  }
+
+  async function addDetail() {
+    const k = editKey.trim();
+    const v = editValue.trim();
+    if (!k || !v || selected === null) return;
+    await setField(selected, k, v);
+    setEditKey("");
+    setEditValue("");
+    setFields(await getFields(selected));
+  }
+
+  async function addLinkRow() {
+    const t = linkUrl.trim();
+    if (!t || selected === null) return;
+    const url = /^https?:\/\//i.test(t) ? t : `https://${t}`;
+    await addLink(selected, platformFromUrl(url), url);
+    setLinkUrl("");
+    setLinks(await getLinks(selected));
+  }
+
+  async function addProfileRow() {
     const name = newName.trim();
     if (!name) return;
     setNewName("");
+    setAddingProfile(false);
     try {
       await createProfile(name);
       await refresh();
+      onProfilesChanged();
     } catch (e) {
       alert("Could not create profile: " + (e instanceof Error ? e.message : String(e)));
     }
   }
 
-  return (
-    <div className="flex h-full">
-      <div className="w-64 shrink-0 border-r border-slate-800 p-4">
-        <h2 className="mb-3 text-sm font-semibold text-slate-300">Profiles</h2>
-        <div className="space-y-1">
-          {profiles.map((p) => (
-            <div key={p.id} className="flex items-center gap-1">
-              <button
-                onClick={() => setSelected(p.id)}
-                className={`flex-1 truncate rounded-md px-3 py-2 text-left text-sm ${
-                  selected === p.id
-                    ? "bg-blue-600/20 text-blue-300"
-                    : "text-slate-400 hover:bg-slate-800"
-                }`}
-              >
-                {p.name}
-                {activeId === p.id && (
-                  <span className="ml-1 text-[10px] text-blue-400">• active</span>
-                )}
-              </button>
-              <button
-                title="Delete profile"
-                onClick={async () => {
-                  if (!confirm(`Delete profile "${p.name}"?`)) return;
-                  await deleteProfile(p.id);
-                  onProfilesChanged();
-                  refresh();
-                }}
-                className="rounded px-2 py-1 text-slate-500 hover:bg-red-900/40 hover:text-red-300"
-              >
-                ✕
-              </button>
-            </div>
-          ))}
+  function Section({
+    id,
+    label,
+    count,
+    children,
+  }: {
+    id: "details" | "links" | "sources";
+    label: string;
+    count: number;
+    children: React.ReactNode;
+  }) {
+    const open = openSection === id;
+    return (
+      <div style={{ width: "100%", maxWidth: 620, marginTop: 10 }}>
+        <button
+          className="chip"
+          style={{ width: "100%", justifyContent: "space-between", background: open ? "var(--hover)" : "var(--card)" }}
+          onClick={() => setOpenSection(open ? null : id)}
+        >
+          <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span className="dot" style={{ background: "var(--accent)" }} />
+            {label}
+          </span>
+          <span className="meta" style={{ fontSize: 13 }}>
+            {count} · {open ? "−" : "+"}
+          </span>
+        </button>
+        <div className={`expand${open ? " open" : ""}`}>
+          <div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "14px 4px" }}>{children}</div>
+          </div>
         </div>
-        <div className="mt-4 flex gap-1">
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        width: "100%",
+        height: "100%",
+        overflowY: "auto",
+      }}
+    >
+      {/* profile switcher */}
+      <div className="rise" style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", justifyContent: "center" }}>
+        {profiles.map((p) => (
+          <button
+            key={p.id}
+            className="chip"
+            style={{
+              padding: "8px 18px",
+              minHeight: 38,
+              fontSize: 14,
+              background: selected === p.id ? "var(--hover)" : "var(--card)",
+              color: selected === p.id ? "var(--text)" : "var(--muted)",
+            }}
+            onClick={() => setSelected(p.id)}
+            title={activeId === p.id ? "Active profile" : undefined}
+          >
+            {activeId === p.id && <span className="dot" style={{ background: "var(--mint)" }} />}
+            {p.name}
+            <span
+              title="Delete profile"
+              role="button"
+              onClick={async (e) => {
+                e.stopPropagation();
+                if (!confirm(`Delete profile "${p.name}"?`)) return;
+                await deleteProfile(p.id);
+                onProfilesChanged();
+                refresh();
+              }}
+              style={{ color: "inherit", opacity: 0.55, fontSize: 12 }}
+            >
+              ✕
+            </span>
+          </button>
+        ))}
+        {addingProfile ? (
           <input
+            autoFocus
+            className="text-input"
+            style={{ width: 180 }}
+            placeholder="Profile name…"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addProfile()}
-            placeholder="New profile name"
-            className="w-full rounded bg-slate-800 px-2 py-1.5 text-xs outline-none"
+            onBlur={() => setAddingProfile(false)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") addProfileRow();
+              if (e.key === "Escape") setAddingProfile(false);
+            }}
           />
+        ) : (
           <button
-            onClick={addProfile}
-            className="rounded bg-blue-600 px-2 py-1.5 text-xs font-medium"
+            onClick={() => setAddingProfile(true)}
+            aria-label="Add profile"
+            title="Add profile"
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: "50%",
+              border: "1.5px dashed #6A5F51",
+              background: "transparent",
+              color: "var(--muted)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
           >
-            +
+            <IcoPlus size={16} />
           </button>
-        </div>
-        <button
-          onClick={onRunOnboarding}
-          className="mt-6 w-full rounded-md bg-slate-800 px-3 py-2 text-xs text-slate-300 hover:bg-slate-700"
-        >
-          Run onboarding chat for a new profile
-        </button>
+        )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6">
-        {selected === null ? (
-          <p className="text-sm text-slate-500">No profiles yet.</p>
-        ) : (
-          <div className="mx-auto max-w-2xl space-y-6">
-            <section>
-              <h3 className="mb-2 text-sm font-semibold text-slate-300">Fields</h3>
-              <div className="space-y-1">
-                {fields.map((f) => (
-                  <div
-                    key={f.id}
-                    className="flex items-start gap-2 rounded-lg bg-slate-800/60 p-2"
-                  >
-                    <span className="w-32 shrink-0 text-xs font-medium text-blue-300">
-                      {f.key}
-                    </span>
-                    <span className="flex-1 text-xs text-slate-300">{f.value}</span>
-                    <button
-                      onClick={async () => {
-                        await deleteField(f.id);
-                        setFields(await getFields(selected));
-                      }}
-                      className="text-slate-500 hover:text-red-300"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-                {!fields.length && (
-                  <p className="text-xs text-slate-500">No fields yet.</p>
-                )}
-              </div>
-              <div className="mt-2 flex gap-1">
-                <input
-                  value={editKey}
-                  onChange={(e) => setEditKey(e.target.value)}
-                  placeholder="key (e.g. goals)"
-                  className="w-36 rounded bg-slate-800 px-2 py-1.5 text-xs outline-none"
-                />
-                <input
-                  value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
-                  placeholder="value"
-                  className="flex-1 rounded bg-slate-800 px-2 py-1.5 text-xs outline-none"
-                />
-                <button
-                  onClick={async () => {
-                    const k = editKey.trim();
-                    const v = editValue.trim();
-                    if (!k || !v) return;
-                    await setField(selected, k, v);
-                    setEditKey("");
-                    setEditValue("");
-                    setFields(await getFields(selected));
-                  }}
-                  className="rounded bg-blue-600 px-3 py-1.5 text-xs"
-                >
-                  Add
-                </button>
-              </div>
-            </section>
+      {selected === null ? (
+        <p className="rise meta" style={{ marginTop: 48 }}>
+          No profiles yet — take the questions below.
+        </p>
+      ) : (
+        <>
+          {/* the scene: ripple rings + breathing persona */}
+          <div className="rise" style={{ marginTop: 36, position: "relative", width: 150, height: 150, flex: "none" }}>
+            <div className="ring" style={{ borderColor: "var(--accent)", width: 150, height: 150, margin: "-75px 0 0 -75px" }} />
+            <div className="ring" style={{ borderColor: "var(--accent)", width: 150, height: 150, margin: "-75px 0 0 -75px", animationDelay: "-3.7s" }} />
+            <div
+              style={{
+                position: "absolute",
+                inset: 11,
+                borderRadius: "50%",
+                background: "var(--accent)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                animation: "breathe 5s ease-in-out infinite",
+              }}
+            >
+              <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="8" r="4" />
+                <path d="M4 21c0-4 4-6 8-6s8 2 8 6" />
+              </svg>
+            </div>
+          </div>
 
-            <section>
-              <h3 className="mb-2 text-sm font-semibold text-slate-300">Links</h3>
-              <div className="space-y-1">
-                {links.map((l) => (
-                  <div
-                    key={l.id}
-                    className="flex items-center gap-2 rounded-lg bg-slate-800/60 p-2"
-                  >
-                    <span className="w-24 shrink-0 text-xs font-medium text-blue-300">
-                      {l.platform}
-                    </span>
-                    <a
-                      href={l.url}
-                      className="flex-1 truncate text-xs text-slate-300 underline decoration-slate-600"
-                    >
-                      {l.url}
-                    </a>
-                    <button
-                      onClick={async () => {
-                        await deleteLink(l.id);
-                        setLinks(await getLinks(selected));
-                      }}
-                      className="text-slate-500 hover:text-red-300"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-                {!links.length && (
-                  <p className="text-xs text-slate-500">No links yet.</p>
-                )}
-              </div>
-              <div className="mt-2 flex gap-1">
-                <input
-                  value={linkUrl}
-                  onChange={(e) => setLinkUrl(e.target.value)}
-                  placeholder="https://github.com/you"
-                  className="flex-1 rounded bg-slate-800 px-2 py-1.5 text-xs outline-none"
-                />
-                <button
-                  onClick={async () => {
-                    const t = linkUrl.trim();
-                    if (!t) return;
-                    const url = /^https?:\/\//i.test(t) ? t : `https://${t}`;
-                    await addLink(selected, platformFromUrl(url), url);
-                    setLinkUrl("");
-                    setLinks(await getLinks(selected));
-                  }}
-                  className="rounded bg-blue-600 px-3 py-1.5 text-xs"
-                >
-                  Add
-                </button>
-              </div>
-            </section>
-
-            <section>
-              <h3 className="mb-2 text-sm font-semibold text-slate-300">
-                Trend sources
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {sources.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={async () => {
-                      await toggleSource(s.id, !s.enabled);
-                      setSources(await getSources(selected));
-                    }}
-                    className={`rounded-full px-3 py-1 text-xs ${
-                      s.enabled
-                        ? "bg-blue-600/30 text-blue-200"
-                        : "bg-slate-800 text-slate-500"
-                    }`}
-                  >
-                    {s.name} {s.enabled ? "✓" : "✕"}
-                  </button>
-                ))}
-              </div>
-            </section>
-
+          <h1 className="rise ser" style={{ animationDelay: "0.2s", margin: "28px 0 0", fontWeight: 400, fontSize: 46, overflowWrap: "anywhere", textAlign: "center" }}>
+            {sel?.name ?? "[Your name]"}
+          </h1>
+          <p className="rise meta" style={{ animationDelay: "0.3s", margin: "8px 0 0", fontSize: 17 }}>
+            {role ?? "[Your role]"}
+          </p>
+          {activeId !== selected && (
             <button
+              className="rise chip"
+              style={{ animationDelay: "0.35s", marginTop: 16, padding: "8px 18px", minHeight: 38, fontSize: 13, color: "var(--accent)", background: "transparent" }}
               onClick={() => onSelect(selected)}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium"
             >
               Set as active profile
             </button>
+          )}
+
+          {/* floating interest chips */}
+          <div style={{ marginTop: 40, maxWidth: 620, display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 16 }}>
+            {interests.map((it, i) => {
+              const tone = CHIP_TONES[i % 3];
+              return (
+                <div key={`${it}-${i}`} className="rise" style={{ animationDelay: `${0.5 + i * 0.1}s` }}>
+                  <div
+                    style={{
+                      animation: "float 6s ease-in-out infinite",
+                      animationDelay: `${(-(i % 3) * 2).toFixed(0)}s`,
+                      background: tone.bg,
+                      color: tone.color,
+                      borderRadius: 999,
+                      padding: "13px 26px",
+                      fontSize: 16,
+                    }}
+                  >
+                    {it}
+                  </div>
+                </div>
+              );
+            })}
+            {addingInterest ? (
+              <div className="rise">
+                <input
+                  autoFocus
+                  className="text-input"
+                  placeholder="New interest…"
+                  value={interestDraft}
+                  onChange={(e) => setInterestDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") addInterest();
+                    if (e.key === "Escape") setAddingInterest(false);
+                  }}
+                  onBlur={() => setAddingInterest(false)}
+                  style={{ borderRadius: 999, width: 150, background: "var(--hover)" }}
+                />
+              </div>
+            ) : (
+              <div className="rise" style={{ animationDelay: `${0.5 + interests.length * 0.1}s` }}>
+                <button
+                  aria-label="Add interest"
+                  onClick={() => setAddingInterest(true)}
+                  style={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: "50%",
+                    border: "1.5px dashed #6A5F51",
+                    background: "transparent",
+                    color: "var(--muted)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <IcoPlus size={18} />
+                </button>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+
+          <Section id="details" label="Details" count={details.length}>
+            {details.map((f) => (
+              <div key={f.id} className="row" style={{ fontSize: 14 }}>
+                <span className="ser" style={{ color: "var(--accent)", minWidth: 96 }}>
+                  {f.key}
+                </span>
+                <span className="meta" style={{ flex: 1, fontSize: 13 }}>
+                  {f.value}
+                </span>
+                <button
+                  onClick={async () => {
+                    await deleteField(f.id);
+                    setFields(await getFields(selected!));
+                  }}
+                  style={{ background: "transparent", border: 0, color: "var(--muted)" }}
+                  title="Delete"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+            {!details.length && <p className="meta" style={{ fontSize: 13, margin: 0 }}>No other details yet.</p>}
+            <div style={{ display: "flex", gap: 8 }}>
+              <input className="text-input" style={{ width: 140 }} placeholder="key (e.g. goals)" value={editKey} onChange={(e) => setEditKey(e.target.value)} />
+              <input className="text-input" style={{ flex: 1 }} placeholder="value" value={editValue} onChange={(e) => setEditValue(e.target.value)} />
+              <button className="chip" style={{ minHeight: 44, padding: "0 20px", color: "var(--accent)", background: "transparent" }} onClick={addDetail}>
+                Add
+              </button>
+            </div>
+          </Section>
+
+          <Section id="links" label="Links" count={links.length}>
+            {links.map((l) => (
+              <div key={l.id} className="row" style={{ fontSize: 14 }}>
+                <span className="ser" style={{ color: "var(--accent)", minWidth: 96 }}>
+                  {l.platform}
+                </span>
+                <a href={l.url} className="meta" style={{ flex: 1, fontSize: 13, textDecoration: "underline" }}>
+                  {l.url}
+                </a>
+                <button
+                  onClick={async () => {
+                    await deleteLink(l.id);
+                    setLinks(await getLinks(selected!));
+                  }}
+                  style={{ background: "transparent", border: 0, color: "var(--muted)" }}
+                  title="Delete"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+            {!links.length && <p className="meta" style={{ fontSize: 13, margin: 0 }}>No links yet.</p>}
+            <div style={{ display: "flex", gap: 8 }}>
+              <input className="text-input" style={{ flex: 1 }} placeholder="https://github.com/you" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} />
+              <button className="chip" style={{ minHeight: 44, padding: "0 20px", color: "var(--accent)", background: "transparent" }} onClick={addLinkRow}>
+                Add
+              </button>
+            </div>
+          </Section>
+
+          <Section id="sources" label="Trend sources" count={sources.filter((s) => s.enabled).length}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+              {sources.map((s) => (
+                <button
+                  key={s.id}
+                  className="chip"
+                  style={{
+                    fontSize: 14,
+                    minHeight: 40,
+                    color: s.enabled ? "var(--accent)" : "var(--muted)",
+                    borderColor: s.enabled ? "var(--chip-line)" : "var(--line-2)",
+                  }}
+                  onClick={async () => {
+                    await toggleSource(s.id, !s.enabled);
+                    setSources(await getSources(selected!));
+                  }}
+                >
+                  <span className="dot" style={{ background: s.enabled ? "var(--mint)" : "#5a5347", animationDelay: `${-s.id}s` }} />
+                  {s.name}
+                </button>
+              ))}
+            </div>
+          </Section>
+
+          {/* bottom action chips */}
+          <div style={{ marginTop: "auto", paddingTop: 28, display: "flex", gap: 12 }}>
+            <button className="chip rise" style={{ animationDelay: "1.3s", background: "transparent" }} onClick={onRunOnboarding}>
+              <IcoRefresh size={16} />
+              Retake the questions
+            </button>
+          </div>
+        </>
+      )}
+
+      {selected === null && (
+        <button className="chip rise" style={{ marginTop: "auto", marginBottom: 20 }} onClick={onRunOnboarding}>
+          <span className="dot" style={{ background: "var(--accent)" }} />
+          Start the questions
+        </button>
+      )}
     </div>
   );
 }

@@ -67,4 +67,3 @@ jobs:
           releaseBody: "Cross-platform desktop builds of the Research Agent. Windows: run the -setup.exe installer. macOS: open the .dmg — unsigned, so right-click → Open the first time (or run `xattr -cr /Applications/Research\\ Agent.app`). Linux: AppImage / deb / rpm."
           releaseDraft: false
           prerelease: false
-          args: --release

@@ -5,7 +5,11 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "sql:default",
+    {
+      "identifier": "sql:default"
+    },
+    "sql:allow-execute",
+    "sql:allow-close",
     "dialog:default",
     {
       "identifier": "http:default",
